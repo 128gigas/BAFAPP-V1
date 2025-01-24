@@ -1,0 +1,102 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Funciones de utilidad
+    function isSuperAdmin() {
+      return request.auth != null && request.auth.token.email == 'dgonzalezuy@hotmail.com';
+    }
+
+    function isClubOwner(clubId) {
+      return request.auth != null && request.auth.uid == clubId;
+    }
+
+    function isClubPlayer(clubId) {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/clubs/$(clubId)/players/$(request.auth.uid));
+    }
+
+    function isPlayer() {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/players/$(request.auth.uid));
+    }
+
+    // Reglas para posts
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if request.auth != null && (
+        isPlayer() || // Permitir a jugadores crear posts
+        exists(/databases/$(database)/documents/clubs/$(request.auth.uid)) // Permitir a clubes crear posts
+      );
+      allow update: if request.auth != null && (
+        resource.data.authorId == request.auth.uid || // El autor puede actualizar
+        exists(/databases/$(database)/documents/clubs/$(request.auth.uid)) // Los clubes pueden actualizar
+      );
+      allow delete: if false;
+    }
+
+    // Reglas para comentarios
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if request.auth != null && (
+        isPlayer() || // Permitir a jugadores comentar
+        exists(/databases/$(database)/documents/clubs/$(request.auth.uid)) // Permitir a clubes comentar
+      );
+      allow update: if request.auth != null && (
+        resource.data.authorId == request.auth.uid || // El autor puede actualizar
+        exists(/databases/$(database)/documents/clubs/$(request.auth.uid)) // Los clubes pueden actualizar
+      );
+      allow delete: if false;
+    }
+
+    // Mantener todas las reglas existentes
+    match /players/{playerId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if request.auth != null && request.auth.uid == playerId;
+      allow delete: if isSuperAdmin();
+    }
+
+    match /clubs/{clubId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && request.auth.uid == clubId;
+      allow delete: if isSuperAdmin();
+
+      match /players/{playerId} {
+        allow read: if true;
+        allow create, update: if request.auth != null && request.auth.uid == clubId;
+        allow delete: if request.auth != null && request.auth.uid == clubId;
+      }
+
+      match /categories/{categoryId} {
+        allow read, write: if request.auth != null && request.auth.uid == clubId;
+        allow read, write: if isSuperAdmin();
+        allow read: if isClubPlayer(clubId);
+      }
+
+      match /coaches/{coachId} {
+        allow read, write: if request.auth != null && request.auth.uid == clubId;
+        allow read, write: if isSuperAdmin();
+      }
+
+      match /trainings/{trainingId} {
+        allow read: if true;
+        allow write: if isSuperAdmin();
+        allow read: if request.auth != null && request.auth.uid == clubId;
+      }
+
+      match /matches/{matchId} {
+        allow read: if request.auth != null && request.auth.uid == clubId;
+      }
+
+      match /statistics/{statId} {
+        allow read: if request.auth != null && request.auth.uid == clubId;
+      }
+
+      match /notifications/{notificationId} {
+        allow read: if request.auth != null && exists(/databases/$(database)/documents/clubs/$(clubId)/players/$(request.auth.uid));
+        allow write: if request.auth != null && request.auth.uid == clubId;
+      }
+    }
+  }
+}
