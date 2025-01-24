@@ -1,0 +1,25 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Función para verificar si el usuario es superadmin
+    function isSuperAdmin() {
+      return request.auth != null && request.auth.token.email == 'dgonzalezuy@hotmail.com';
+    }
+
+    // Reglas para las fotos de entrenadores
+    match /coaches/{clubId}/{fileName} {
+      // El club puede leer y escribir sus propias fotos
+      allow read, write: if request.auth != null && request.auth.uid == clubId;
+      
+      // El superadmin puede leer y escribir todas las fotos
+      allow read, write: if isSuperAdmin();
+
+      // Validaciones para la subida de archivos
+      allow create: if request.auth != null 
+        && request.auth.uid == clubId
+        && request.resource.size < 5 * 1024 * 1024 // 5MB máximo
+        && request.resource.contentType.matches('image/.*') // Solo imágenes
+        && request.resource.contentType.matches('image/(jpeg|jpg|png)'); // Formatos permitidos
+    }
+  }
+}
